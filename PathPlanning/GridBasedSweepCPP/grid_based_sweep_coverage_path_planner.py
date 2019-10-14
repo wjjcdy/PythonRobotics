@@ -1,3 +1,4 @@
+#coding:utf-8
 """
 Grid based sweep planner
 
@@ -30,35 +31,38 @@ class SweepSearcher:
         RIGHT = 1
         LEFT = -1
 
-    def __init__(self, mdirection, sdirection, xinds_goaly, goaly):
+    def __init__(self, mdirection, sdirection):
         self.moving_direction = mdirection
         self.sweep_direction = sdirection
         self.turing_window = []
         self.update_turning_window()
+
+    def goal_set(self,xinds_goaly,goaly):
         self.xinds_goaly = xinds_goaly
         self.goaly = goaly
 
-    def move_target_grid(self, cxind, cyind, gmap):
-        nxind = self.moving_direction + cxind
-        nyind = cyind
+
+    def move_target_grid(self, cxind, cyind, gmap):          # 根据当前点和栅格图状态，查找下一个点
+        nxind = self.moving_direction + cxind                # x方向根据扫描方向。 如向右，则 x_next = x_curr+ 1
+        nyind = cyind                                        # y坐标暂时不变，用于判断此刻是否为
 
         # found safe grid
-        if not gmap.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5):
+        if not gmap.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5):  # 若为空闲直接返回下个点，未走过的是空闲。第一次探索不可以为已经走过的路
             return nxind, nyind
         else:  # occupided
-            ncxind, ncyind = self.find_safe_turning_grid(cxind, cyind, gmap)
-            if (ncxind is None) and (ncyind is None):
-                # moving backward
+            ncxind, ncyind = self.find_safe_turning_grid(cxind, cyind, gmap)       # 判断拐弯所有的点，包括当前位置上方三个位置（即8连通的上方3个位置）
+            if (ncxind is None) and (ncyind is None):                              # 如果都没有空间，
+                # moving backward                                                  # 则应回退一格
                 ncxind = -self.moving_direction + cxind
                 ncyind = cyind
-                if gmap.check_occupied_from_xy_index(ncxind, ncyind):
+                if gmap.check_occupied_from_xy_index(ncxind, ncyind):              # 回退一格可以为走过的路，即回退可为行走过的路，
                     # moved backward, but the grid is occupied by obstacle
                     return None, None
-            else:
+            else:                                                                  # 若拐弯存在空闲点, 即需要转向下一行，需要从下一行尽头开始(注意此时位置和下一刻位置有可能不再连续)
                 # keep moving until end
-                while not gmap.check_occupied_from_xy_index(ncxind + self.moving_direction, ncyind, occupied_val=0.5):
-                    ncxind += self.moving_direction
-                self.swap_moving_direction()
+                # while not gmap.check_occupied_from_xy_index(ncxind + self.moving_direction, ncyind, occupied_val=0.5):
+                #     ncxind += self.moving_direction
+                self.swap_moving_direction()                                       # 左右扫描的方向需要进行切换
             return ncxind, ncyind
 
     def find_safe_turning_grid(self, cxind, cyind, gmap):
@@ -69,7 +73,7 @@ class SweepSearcher:
             nyind = dyind + cyind
 
             # found safe grid
-            if not gmap.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5):
+            if not gmap.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5): # 探索必须未经过的位置
                 return nxind, nyind
 
         return None, None
@@ -107,9 +111,9 @@ class SweepSearcher:
         elif self.moving_direction == self.MovingDirection.LEFT:
             return max(xinds), y_ind
 
-        raise ValueError("self.moving direction is invalid ")
+        raise ValueError("self.moving direction is invalid ")    # 找到清扫的起点
 
-
+# find max length edge as sweep direction, 
 def find_sweep_direction_and_start_posi(ox, oy):
     # find sweep_direction
     max_dist = 0.0
@@ -127,7 +131,7 @@ def find_sweep_direction_and_start_posi(ox, oy):
 
     return vec, sweep_start_pos
 
-
+# convert coordinate , keep start_pos as origin point and keep max length edge as x 
 def convert_grid_coordinate(ox, oy, sweep_vec, sweep_start_posi):
     tx = [ix - sweep_start_posi[0] for ix in ox]
     ty = [iy - sweep_start_posi[1] for iy in oy]
@@ -142,7 +146,7 @@ def convert_grid_coordinate(ox, oy, sweep_vec, sweep_start_posi):
 
     return rx, ry
 
-
+# return back coordinate
 def convert_global_coordinate(x, y, sweep_vec, sweep_start_posi):
     th = math.atan2(sweep_vec[1], sweep_vec[0])
     c = np.cos(th)
@@ -170,134 +174,186 @@ def search_free_grid_index_at_edge_y(grid_map, from_upper=False):
 
     for iy in xrange:
         for ix in yrange:
-            if not grid_map.check_occupied_from_xy_index(ix, iy):
+            if not grid_map.check_occupied_from_xy_index(ix, iy,occupied_val=0.5):
                 yind = iy
                 xinds.append(ix)
-        if yind:
+        if yind:       #在高度这个维度上，找到第一个空闲的点则停止，并记录水平方向上所有的点
             break
 
     return xinds, yind
 
 
-def setup_grid_map(ox, oy, reso, sweep_direction, offset_grid=10):
-    width = math.ceil((max(ox) - min(ox)) / reso) + offset_grid
+def setup_grid_map(ox, oy, ox_in,oy_in,reso, offset_grid=10):
+    width = math.ceil((max(ox) - min(ox)) / reso) + offset_grid    # 创建一个栅格地图，可包括整个区域
     height = math.ceil((max(oy) - min(oy)) / reso) + offset_grid
     center_x = np.mean(ox)
     center_y = np.mean(oy)
 
-    grid_map = GridMap(width, height, reso, center_x, center_y)
+    grid_map = GridMap(width, height, reso, center_x, center_y)    #创建
 
-    grid_map.set_value_from_polygon(ox, oy, 1.0, inside=False)
+    grid_map.set_value_from_polygon(ox, oy, 1.0, inside=False)     #将多边形外均设为1，内部默认为0
 
-    grid_map.expand_grid()
+    for i in range(len(ox_in)):
+        grid_map.set_value_from_polygon(ox_in[i], oy_in[i], 1.0, inside=True)     #将多边形内均设为1，外部默认为0
 
+    grid_map.expand_grid()    # 膨胀一个栅格大小
+    return grid_map
+
+
+def find_goal_map(grid_map, sweep_direction):
     xinds_goaly = []
     goaly = 0
-    if sweep_direction == SweepSearcher.SweepDirection.UP:
+    if sweep_direction == SweepSearcher.SweepDirection.UP:        # 根据上下查找方向找到 最后一个点坐标y的坐标
         xinds_goaly, goaly = search_free_grid_index_at_edge_y(grid_map, from_upper=True)
     elif sweep_direction == SweepSearcher.SweepDirection.DOWN:
         xinds_goaly, goaly = search_free_grid_index_at_edge_y(grid_map, from_upper=False)
+    return xinds_goaly, goaly
 
-    return grid_map, xinds_goaly, goaly
-
-
+# 计算路线
 def sweep_path_search(sweep_searcher, gmap, grid_search_animation=False):
     # search start grid
-    cxind, cyind = sweep_searcher.search_start_grid(gmap)
-    if not gmap.set_value_from_xy_index(cxind, cyind, 0.5):
+    cxind, cyind = sweep_searcher.search_start_grid(gmap)     #查找起点，索引
+    if not gmap.set_value_from_xy_index(cxind, cyind, 0.5):   #设置起点为0.5
         print("Cannot find start grid")
         return [], []
 
-    x, y = gmap.calc_grid_central_xy_position_from_xy_index(cxind, cyind)
-    px, py = [x], [y]
+    x, y = gmap.calc_grid_central_xy_position_from_xy_index(cxind, cyind)  # 获取索引对应的位置
+    px, py = [x], [y]                                                      # 清扫路线第一个位置
 
     if grid_search_animation:
         fig, ax = plt.subplots()
 
     while True:
-        cxind, cyind = sweep_searcher.move_target_grid(cxind, cyind, gmap)
+        cxind, cyind = sweep_searcher.move_target_grid(cxind, cyind, gmap) # 根据当前点，和栅格图，移动到下一个点
 
         if sweep_searcher.is_search_done(gmap) or (cxind is None or cyind is None):
             print("Done")
             break
 
-        x, y = gmap.calc_grid_central_xy_position_from_xy_index(
+        x, y = gmap.calc_grid_central_xy_position_from_xy_index(           # 计算位置并放入清扫路线向量中
             cxind, cyind)
 
         px.append(x)
         py.append(y)
 
-        gmap.set_value_from_xy_index(cxind, cyind, 0.5)
+        gmap.set_value_from_xy_index(cxind, cyind, 0.5)                    # 设置为0.5
 
         if grid_search_animation:
             gmap.plot_grid_map(ax=ax)
             plt.pause(1.0)
 
-    gmap.plot_grid_map()
-
     return px, py
 
 
-def planning(ox, oy, reso,
+def planning(ox, oy, ox_in,oy_in,reso,
              moving_direction=SweepSearcher.MovingDirection.RIGHT,
              sweeping_direction=SweepSearcher.SweepDirection.UP,
              ):
-    sweep_vec, sweep_start_posi = find_sweep_direction_and_start_posi(ox, oy)
+    sweep_vec, sweep_start_posi = find_sweep_direction_and_start_posi(ox, oy)    # get max length edge, vector (dx,dy)   and  start pose
 
     rox, roy = convert_grid_coordinate(ox, oy, sweep_vec, sweep_start_posi)
 
-    gmap, xinds_goaly, goaly = setup_grid_map(rox, roy, reso, sweeping_direction)
+    fig, ax = plt.subplots()
+    gmap = setup_grid_map(rox, roy, ox_in,oy_in, reso)
+    gmap.plot_grid_map(ax=ax)
+    sweep_searcher = SweepSearcher(moving_direction, sweeping_direction)
 
-    sweep_searcher = SweepSearcher(moving_direction, sweeping_direction, xinds_goaly, goaly)
+    px=[]
+    py=[]
 
-    px, py = sweep_path_search(sweep_searcher, gmap)
-
-    rx, ry = convert_global_coordinate(px, py, sweep_vec, sweep_start_posi)
-
-    print("Path length:", len(rx))
-
-    return rx, ry
-
-
-def planning_animation(ox, oy, reso):  # pragma: no cover
-    px, py = planning(ox, oy, reso)
-
-    # animation
-    if do_animation:
-        for ipx, ipy in zip(px, py):
-            plt.cla()
-            plt.plot(ox, oy, "-xb")
-            plt.plot(px, py, "-r")
-            plt.plot(ipx, ipy, "or")
-            plt.axis("equal")
-            plt.grid(True)
-            plt.pause(0.1)
+    for i in range(4):
+        xinds_goaly, goaly = find_goal_map(gmap, sweeping_direction)
+        if len(xinds_goaly) == 0:
+            break
+        sweep_searcher.goal_set(xinds_goaly,goaly)
+        px_temp, py_temp = sweep_path_search(sweep_searcher, gmap)
+        gmap.plot_grid_map(ax=ax)
+        px.append(px_temp)
+        py.append(py_temp)
 
     plt.cla()
-    plt.plot(ox, oy, "-xb")
-    plt.plot(px, py, "-r")
+    plt.plot(rox, roy, "-xb")
+    for i in range(len(ox_in)):
+        plt.plot(ox_in[i], oy_in[i], "-xb")
+    rx = []
+    ry = []
+    path_len = 0
+    color=["-xr","-xg","-xb","-.","-o"]
+    for i in range(len(px)):
+        plt.plot(px[i], py[i], color[i])
+        rx_temp, ry_temp = convert_global_coordinate(px[i], py[i], sweep_vec, sweep_start_posi)
+        rx.append(rx_temp)
+        ry.append(ry_temp)
+        path_len = path_len + len(rx_temp)
     plt.axis("equal")
     plt.grid(True)
     plt.pause(0.1)
 
 
+    print("Path zero length:", len(rx))
+    print("Path length:", path_len)
+
+
+    return rx, ry
+
+
+def planning_animation(ox, oy,ox_in,oy_in, reso):  # pragma: no cover
+    px, py = planning(ox, oy, ox_in,oy_in,reso)
+
+    # animation
+    # if do_animation:
+    #     for ipx, ipy in zip(px, py):
+    #         plt.cla()
+    #         plt.plot(ox, oy, "-xb")
+    #         plt.plot(px, py, "-r")
+    #         # plt.plot(ipx, ipy, "or")
+    #         plt.axis("equal")
+    #         plt.grid(True)
+    #         # plt.pause(0.1)
+
+    # plt.cla()
+    # plt.plot(ox, oy, "-xb")
+    # plt.plot(px, py, "-xr")
+    # plt.axis("equal")
+    # plt.grid(True)
+    # plt.pause(0.1)
+
+
 def main():  # pragma: no cover
     print("start!!")
 
-    ox = [0.0, 20.0, 50.0, 100.0, 130.0, 40.0, 0.0]
-    oy = [0.0, -20.0, 0.0, 30.0, 60.0, 80.0, 0.0]
-    reso = 5.0
-    planning_animation(ox, oy, reso)
+    # ox = [0.0, 20.0, 50.0, 100.0, 130.0, 40.0, 0.0]
+    # oy = [0.0, -20.0, 0.0, 30.0, 60.0, 80.0, 0.0]
+    # reso = 5.0
+    # planning_animation(ox, oy, reso)
 
-    ox = [0.0, 50.0, 50.0, 0.0, 0.0]
-    oy = [0.0, 0.0, 30.0, 30.0, 0.0]
-    reso = 1.3
-    planning_animation(ox, oy, reso)
+    # ox = [0.0, 50.0, 50.0, 0.0, 0.0]
+    # oy = [0.0, 0.0, 30.0, 30.0, 0.0]
+    # reso = 1.3
+    # planning_animation(ox, oy, reso)
 
-    ox = [0.0, 20.0, 50.0, 200.0, 130.0, 40.0, 0.0]
-    oy = [0.0, -80.0, 0.0, 30.0, 60.0, 80.0, 0.0]
-    reso = 5.0
-    planning_animation(ox, oy, reso)
+    # ox = [0.0, 100.0, 100.0, 50, 50, 75, 75, 100, 100, 0.0, 0.0]
+    # oy = [0.0, 0.0,  18.0,   18, 28, 28, 18, 18 , 40,  40.0, 0.0]
+    # reso = 3
+    # planning_animation(ox, oy, reso)
+
+    # ox = [0.0, 200.0, 200.0, 50, 50, 75, 75, 100, 100, 150, 150, 200 ,200, 0.0, 0.0]
+    # oy = [0.0, 0.0,  18.0,   18, 28, 28, 18, 18 , 28,  28,  18,  18, 40,  40.0, 0.0]
+    # reso = 3
+    # planning_animation(ox, oy, reso)
+
+    ox_outside = [0.0, 200.0, 200, 0.0, 0.0]
+    oy_outside = [0.0, 0.0,  60,  60.0, 0.0]
+
+    ox_inside = [[50, 90, 75, 50],[100, 150, 130, 100],[160, 170, 130 , 160]]
+    oy_inside = [[18, 48, 28, 18],[18 , 45,  28,  18] ,[20,  30,  10,   20]]
+    reso = 3
+    planning_animation(ox_outside, oy_outside, ox_inside, oy_inside, reso)
+
+    # ox = [0.0, 20.0, 50.0, 200.0, 130.0, 40.0, 0.0]
+    # oy = [0.0, -80.0, 0.0, 30.0, 60.0, 80.0, 0.0]
+    # reso = 5.0
+    # planning_animation(ox, oy, reso)
 
     plt.show()
 
