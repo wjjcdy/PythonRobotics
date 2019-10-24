@@ -336,7 +336,7 @@ def animation(world_map, sweep_map, reso, X,ax1,ax2,ox, oy,ox_in,oy_in):
     y_pos = X[1,0] + 1.5 * math.sin(X[2, 0])    
     ax2.plot(x_pos, y_pos, ".r")
     plt.axis("equal")
-    plt.pause(0.2)
+    plt.pause(0.05)
 
 
 def calc_input(v,yawrate):
@@ -431,8 +431,10 @@ def turn_target(x,target_angle):
 def main():  # pragma: no cover
     print("start!!")
 
-    ox_outside = [0.0, 200.0, 200, 0.0, 0.0]
-    oy_outside = [0.0, 0.0,  60,  60.0, 0.0]
+    # ox_outside = [0.0, 200.0, 200, 0.0, 0.0]
+    # oy_outside = [0.0, 0.0,  60,  60.0, 0.0]
+    ox_outside = [0.0, 200.0, 200,   150,   150.0, 50, 50, 0.0,  0.0]
+    oy_outside = [0.0, 0.0,   45.0,  45.0,  60.0,  60, 45, 45,   0.0]
 
     for i in range(len(ox_outside)):
         ox_outside[i] = ox_outside[i] / 4.0
@@ -455,8 +457,8 @@ def main():  # pragma: no cover
     # 创建地图
     # 1.即机器人绕行外边界一周，跟随外边界功能
     # 2.记录行走后的坐标，作为外边界
-    ox_recode = [0.0, 25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0, 200.0, 200.0, 200.0, 200.0, 175.0, 150.0, 125.0, 100.0, 75.0, 50.0, 0.0,  0.0]
-    oy_recode = [0.0, 0.0,  0.0,  0.0,  0.0  , 0.0,   0.0,   0.0,   0.0,   20.0,  40.0,  60.0,  60.0,  60.0,  60.0,  60.0,  60.0, 60.0, 60.0, 0.0]
+    ox_recode = [0.0, 200.0, 200,   150,   150.0, 50, 50, 0.0,  0.0]
+    oy_recode = [0.0, 0.0,   45.0,  45.0,  60.0,  60, 45, 45,   0.0]
 
     for i in range(len(ox_recode)):
         ox_recode[i] = ox_recode[i] / 4.0
@@ -506,6 +508,7 @@ def main():  # pragma: no cover
     curr_state = HOR_search
 
     sweep_x_direction = 1      # 初始清扫方向为从左到右
+    sweep_x_direction_back = sweep_x_direction # for back mode 
     nxind = cxind 
     nyind = cyind
 
@@ -585,7 +588,7 @@ def main():  # pragma: no cover
 
         # 旋转至左上方（若左遍历，则右上角方向）          
         elif curr_state == LEFT_UP_move: 
-            if sweep_x_direction>0:
+            if sweep_x_direction >0:
                 v,yaw_rate,finish_flag  = turn_target(xTrue,3*math.pi/4 )
             else:
                 v,yaw_rate,finish_flag  = turn_target(xTrue,math.pi/4)
@@ -595,7 +598,7 @@ def main():  # pragma: no cover
                 curr_state = LEFT_UP_search
         # 查看左上方障碍物状态（若左遍历，则右上角方向）
         elif curr_state == LEFT_UP_search:  #
-            nxind = cxind - sweep_x_direction
+            nxind = cxind - sweep_x_direction_back
             nyind = cyind + 1
             if not path_gird_map.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5) and \
                not real_world_gmap.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5):   # 无障碍:   # 无障碍
@@ -607,9 +610,9 @@ def main():  # pragma: no cover
         # 需要回退一格，因此先旋转至后退方向
         elif curr_state == BACK_turn:  #
             if sweep_x_direction>0:
-                v,yaw_rate,finish_flag  = turn_target(xTrue,-math.pi)
-            else:
                 v,yaw_rate,finish_flag  = turn_target(xTrue,math.pi)
+            else:
+                v,yaw_rate,finish_flag  = turn_target(xTrue,0)
             if finish_flag:
                 v = 0.0
                 yaw_rate = 0.0
@@ -620,6 +623,8 @@ def main():  # pragma: no cover
             nyind = cyind
             if not path_gird_map.check_occupied_from_xy_index(nxind, nyind, occupied_val=1.0):   # 已走过的或者空白的均可
                 curr_state = BACK_move                                                 # 下周期继续水平方向
+                nxind = cxind - sweep_x_direction
+                nyind = cyind 
             else: 
                 curr_state = FINISH
             v = 0.0
@@ -627,11 +632,17 @@ def main():  # pragma: no cover
 
         # 旋转至回退的方向
         elif curr_state == BACK_move:
-            nxind = cxind - sweep_x_direction
-            nyind = cyind 
+            # nxind = cxind - sweep_x_direction
+            # nyind = cyind 
             v, yaw_rate = move_target(xTrue,nxind,nyind,path_gird_map)
             if math.fabs(v)<0.00001 and math.fabs(yaw_rate) < 0.000001 :
-                curr_state = LEFT_UP_move                                               # 回退后，重复判断左上角
+                nxind = cxind - sweep_x_direction_back
+                nyind = cyind + 1
+                if not path_gird_map.check_occupied_from_xy_index(nxind, nyind, occupied_val=0.5):  
+                    sweep_x_direction_back = -sweep_x_direction
+                    curr_state = LEFT_UP_move                                               # 回退后，重复判断左上角
+                else:
+                    curr_state = BACK_search
 
         # 向前移动一个栅格到目标位置
         elif curr_state == FRONT_move:                                                  # 前行一个栅格距离
@@ -650,8 +661,9 @@ def main():  # pragma: no cover
                 yaw_rate = 0.0
                 curr_state = HOR_search
                 sweep_x_direction = -sweep_x_direction                                  # 切换水平遍历方向
+                sweep_x_direction_back = sweep_x_direction
 
-        print("curr: (%d), v:(%f), yaw_rate:(%f)" %(curr_state,v,yaw_rate))
+        print("curr: (%d), v:(%f), yaw_rate:(%f),direction:(%d),back_direction:(%d)" %(curr_state,v,yaw_rate,sweep_x_direction,sweep_x_direction_back))
         # x,y=path_gird_map.calc_grid_central_xy_position_from_xy_index(nxind, nyind)
         # print("curr_x:(%f), curr_y:(%f),head:(%f),n_x:(%f),n_y:(%f)"%(xTrue[0,0], xTrue[1,0],xTrue[2,0],x,y))
 
